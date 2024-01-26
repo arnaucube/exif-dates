@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -12,23 +13,31 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-const version = "v0.0.1_2024-01-04"
+const version = "v0.0.2_2024-01-26"
 const layout = "2006-01-02T15:04:05.000Z"
-const outputDir = "output"
 
 func main() {
 	fmt.Println("version:", version)
 
-	if err := os.Mkdir(outputDir, os.ModePerm); err != nil {
+	var versionFlag bool
+	var inputDirFlag, outputDirFlag string
+	flag.BoolVar(&versionFlag, "version", false, "print current version")
+	flag.BoolVar(&versionFlag, "v", false, "print current version")
+	flag.StringVar(&inputDirFlag, "input", "./", "input directory")
+	flag.StringVar(&inputDirFlag, "i", "./", "input directory")
+	flag.StringVar(&outputDirFlag, "output", "output", "output directory")
+	flag.StringVar(&outputDirFlag, "o", "output", "output directory")
+	flag.Parse()
+
+	if versionFlag {
+		os.Exit(0)
+	}
+
+	if err := os.Mkdir(outputDirFlag, os.ModePerm); err != nil {
 		log.Fatal("output directory already exists")
 	}
 
-	dir := "."
-	if len(os.Args) > 1 {
-		dir = os.Args[1]
-	}
-
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(inputDirFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +48,7 @@ func main() {
 			continue
 		}
 
-		fileName := dir + "/" + e.Name()
+		fileName := inputDirFlag + "/" + e.Name()
 		fileExtension := path.Ext(fileName)
 		// get file
 		fmt.Printf("---FileName: %s,", fileName)
@@ -61,7 +70,7 @@ func main() {
 		}
 		fmt.Println("\n  DATE", date)
 
-		newFileName := getValidFileName(outputDir+"/"+date.String(), fileExtension)
+		newFileName := getValidFileName(outputDirFlag+"/"+date.String(), fileExtension)
 		newFileName = newFileName + fileExtension
 
 		fmt.Println("  storing the new img as", newFileName)
