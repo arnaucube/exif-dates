@@ -10,14 +10,14 @@ import (
 	"path"
 	"time"
 
-	"github.com/rwcarlsen/goexif/exif"
+	"github.com/evanoberholster/imagemeta"
 )
 
-const version = "v0.0.2_2024-01-26"
+const version = "v0.0.3_2024-02-13"
 const layout = "2006-01-02T15:04:05.000Z"
 
 func main() {
-	fmt.Println("version:", version)
+	fmt.Printf("version: %s\n  (get latest version at https://github.com/arnaucube/exif-dates/releases )\n\n", version)
 
 	var versionFlag bool
 	var inputDirFlag, outputDirFlag string
@@ -42,16 +42,20 @@ func main() {
 		log.Fatal(err)
 	}
 
+	nImgsDetected := 0
+	nImgsConverted := 0
+	var unconvertedFileNames []string
 	for _, e := range entries {
 		// skip subdirectories
 		if e.IsDir() {
 			continue
 		}
+		nImgsDetected++
 
 		fileName := inputDirFlag + "/" + e.Name()
 		fileExtension := path.Ext(fileName)
 		// get file
-		fmt.Printf("---FileName: %s,", fileName)
+		fmt.Printf("--> FileName: %s,", fileName)
 		f, err := os.Open(fileName)
 		if err != nil {
 			fmt.Println("\ne", err)
@@ -60,25 +64,29 @@ func main() {
 
 		// get camera date
 		date, err := getExifDate(f)
-		if err != nil && (err == io.EOF || err.Error() == "exif: failed to find exif intro marker") {
-			fmt.Println("  not an img file, skipping file")
-			continue
-		}
 		if err != nil {
-			fmt.Println("err", err)
+			fmt.Printf(" Error: %s\n\n", err)
+			unconvertedFileNames = append(unconvertedFileNames, fileName)
 			continue
 		}
 		fmt.Println("\n  DATE", date)
+		dateString := date.String()
+		if date.IsZero() {
+			// if date is not set (=0), do not use the zero date as
+			// name, and reuse the original name of the file
+			fn := e.Name()
+			dateString = fn[0 : len(fn)-len(fileExtension)]
+		}
 
-		newFileName := getValidFileName(outputDirFlag+"/"+date.String(), fileExtension)
+		newFileName := getValidFileName(outputDirFlag+"/"+dateString, fileExtension)
 		newFileName = newFileName + fileExtension
 
-		fmt.Println("  storing the new img as", newFileName)
+		fmt.Printf("  storing the new img as %s\n\n", newFileName)
 
 		// duplicate the original file into newFileName
 		f, err = os.Open(fileName)
 		if err != nil {
-			fmt.Println("\ne", err)
+			fmt.Printf("\nerror (os.Open): %s\n\n", err)
 		}
 		defer f.Close()
 		fo, err := os.Create(newFileName)
@@ -101,24 +109,26 @@ func main() {
 			}
 		}
 		// set the img date into the file date (file's access and modification times)
+		// Notice that when exif.time=0, this will be the date being
+		// set here. In a future version might change it to just reuse
+		// the original file date.
 		os.Chtimes(newFileName, *date, *date)
-
+		nImgsConverted++
 	}
-
+	fmt.Printf("converted %d images out of %d\n", nImgsConverted, nImgsDetected)
+	fmt.Println("Unconverted images:")
+	for i := 0; i < len(unconvertedFileNames); i++ {
+		fmt.Println("    ", unconvertedFileNames[i])
+	}
 }
 
 func getExifDate(f *os.File) (*time.Time, error) {
-	x, err := exif.Decode(f)
+	x, err := imagemeta.Decode(f)
 	if err != nil {
 		return nil, err
 	}
-
-	d, err := x.DateTime()
-	if err != nil {
-		return nil, err
-	}
-
-	return &d, nil
+	t := x.DateTimeOriginal()
+	return &t, nil
 }
 
 func getValidFileName(fileName, fileExtension string) string {
